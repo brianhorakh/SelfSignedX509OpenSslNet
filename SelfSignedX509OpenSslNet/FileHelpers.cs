@@ -54,9 +54,60 @@ namespace SelfSignedX509OpenSslNet
 
             using (var bio = FileHelpers.Write(fileName))
             {
+				// NOTE: there are docs on the Internet which suggest that passing Cipher.Null or just "null" as the Cipher
+				// will let this function generate a unencrypted private key.  If referencing OpenSSL directly this is true,
+				// however the ManagedOpenSSL does some extra checking that rejects null before it ever gets to openSSL to avoid
+				// a null pointer exception. I don't feel like copying that library into Github -- so I just added:
+				// 		WritePrivateKeyFileWithoutPass 
+				// for reference here is the source to CryptoKey 
+				//		http://www.opensourcejavaphp.net/csharp/openssldotnet/CryptoKey.cs.html   
+				// to start your adventure CTRL+F "WritePrivateKey"
                 cryptoKey.WritePrivateKey(bio, Cipher.DES_EDE3_CBC, password);
             }
         }
+		
+		
+        /// <summary>
+        /// Writes the specified cryptoKey out to the file in the fileName parameter. The contents of the
+        /// file is UNENCRYPTED
+        /// </summary>
+        /// <param name="cryptoKey">The CryptoKey containing the Private key to be written to file.</param>
+        /// <param name="fileName">The name and location of the file to be written.</param>
+		public static void WritePrivateKeyToFileWithoutPass(CryptoKey cryptoKey, string fileName)
+        {
+            if (cryptoKey == null)
+            {
+                throw new ArgumentNullException("cryptoKey", "CryptoKey is null");
+            }
+
+            using (var bio = FileHelpers.Write(fileName))
+            {
+                cryptoKey.WritePrivateKey(bio, Cipher.DES_EDE3_CBC, "abc123");
+            }
+            //
+            // *****************************************************
+            //          H E Y  --  R E A D T H I S !! 
+            // *****************************************************
+            // PrivateKeyAsPEM has some type of bug that if it's called 
+            // after WritePrivateKey (above) it works (even if that result
+            // is discarded/overwritten) ..yes, i agree it's terrifying.
+            // but this code works,  it seems to be a bug in openSSL, possibly with utf8/ascii bytes
+            //
+            using (var bio = FileHelpers.Write(fileName))
+            {
+
+                // cryptoKey.WritePrivateKey(bio,Cipher.Null,"abc123");
+                // cryptoKey.WritePrivateKey(bio, Cipher.DES_EDE3_CBC, "abc123");
+                // OpenSSL.Core.BIO outs = OpenSSL.Core.BIO.MemoryBuffer(false);
+                bio.Write(cryptoKey.GetRSA().PrivateKeyAsPEM);
+                // bio.Write(cryptoKey.GetDSA().PrivateKeyAsPEM);
+                // bio.Write(cryptoKey.ToString());
+                // bio.SetClose(OpenSSL.Core.BIO.CloseOption.Close);
+                //Console.WriteLine(outs.ReadString());
+            }
+        }
+
+		
 
         /// <summary>
         /// Loads the private key into memory (as a BIO object) and attempts to create a private key using the RSA algorithm and
